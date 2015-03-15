@@ -97,7 +97,6 @@ const
 {$ENDIF}
   BufferSize      = BlocksPerBuffer * BlockSize;  // Size of read buffer
 
-  // change to hex
   PiTable: Array[Byte] of Byte =(
     $29, $2E, $43, $C9, $A2, $D8, $7C, $01, $3D, $36, $54, $A1, $EC, $F0, $06, $13,
     $62, $A7, $05, $F3, $C0, $C7, $73, $8C, $98, $93, $2B, $D9, $BC, $4C, $82, $CA,
