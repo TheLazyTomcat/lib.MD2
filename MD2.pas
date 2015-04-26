@@ -9,7 +9,7 @@
 
   MD2 Hash Calculation
 
-  ©2015 František Milt
+  ©František Milt 2015-04-26
 
   Version 1.1
 
@@ -252,18 +252,18 @@ end;
 
 Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TSize): TMD2Hash;
 var
-  FullBlocks:     LongWord;
-  HelpBlocks:     LongWord;
+  FullBlocks:     Integer;
+  HelpBlocks:     Integer;
   HelpBlocksBuff: Pointer;
 begin
 Result := ZeroMD2;
 FullBlocks := Size div BlockSize;
 BufferMD2(MD2State,Buffer,FullBlocks * BlockSize);
-HelpBlocks := Succ(Size div BlockSize) - FullBlocks;
+HelpBlocks := Succ(Size div BlockSize) - Int64(FullBlocks);
 HelpBlocksBuff := AllocMem(HelpBlocks * BlockSize);
 try
   FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,Byte(((Int64(FullBlocks) + HelpBlocks) * BlockSize) - Size));
-  Move(TByteArray(Buffer)[FullBlocks * BlockSize],HelpBlocksBuff^,Size - (Int64(FullBlocks) * BlockSize));
+  Move(TByteArray(Buffer)[FullBlocks * BlockSize],HelpBlocksBuff^,Size - TSize(FullBlocks * BlockSize));
   BufferMD2(MD2State,HelpBlocksBuff^,HelpBlocks * BlockSize);
   BlockHash(MD2State,MD2State.Checksum);
   Move(MD2State.HashBuffer,Result,SizeOf(Result));
@@ -411,7 +411,7 @@ end;
 
 procedure MD2_Update(Context: TMD2Context; const Buffer; Size: TSize);
 var
-  FullBlocks:     LongWord;
+  FullBlocks:     Integer;
   RemainingSize:  TSize;
 begin
 with PMD2Context_Internal(Context)^ do
@@ -438,7 +438,7 @@ with PMD2Context_Internal(Context)^ do
         BufferMD2(MD2State,Buffer,FullBlocks * BlockSize);
         If TSize(FullBlocks * BlockSize) < Size then
           begin
-            TransferSize := Size - (Int64(FullBlocks) * BlockSize);
+            TransferSize := Size - TSize(FullBlocks * BlockSize);
             Move(TByteArray(Buffer)[Size - TransferSize],TransferBuffer,TransferSize);
           end;
       end;
