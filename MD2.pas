@@ -9,9 +9,9 @@
 
   MD2 Hash Calculation
 
-  ©František Milt 2015-04-26
+  ©František Milt 2015-05-06
 
-  Version 1.1
+  Version 1.1.1
 
 ===============================================================================}
 unit MD2;
@@ -25,14 +25,16 @@ uses
   Classes;
 
 const
-  BlockSize  = 16;  // 128 bits
+  BlockSize = 16;  // 128 bits
 
 type
 {$IFDEF x64}
-  TSize = UInt64;
+  PtrUInt = UInt64;
 {$ELSE}
-  TSize = LongWord;
+  PtrUInt = LongWord;
 {$ENDIF}
+
+  TSize = PtrUInt;
 
   TMD2Block = Array[0..Pred(BlockSize)] of Byte;
   PMD2Block = ^TMD2Block;
@@ -158,7 +160,7 @@ For j := 0 to 17 do
         MD2State.HashBuffer[k] := MD2State.HashBuffer[k] xor PiTable[PiIndex];
         PiIndex := MD2State.HashBuffer[k];
       end;
-    Inc(PiIndex,j);
+    PiIndex := Byte(Integer(PiIndex) + j);
   end;
 end;
 
@@ -229,19 +231,20 @@ end;
 //==============================================================================
 
 procedure BufferMD2(var MD2State: TMD2State; const Buffer; Size: TSize);
-type
-  TBlocksArray = Array[0..0] of TMD2Block;
 var
-  i:  TSize;
+  i:    TSize;
+  Buff: PMD2Block;
 begin
 If Size > 0 then
   begin
     If (Size mod BlockSize) = 0 then
       begin
+        Buff := @Buffer;
         For i := 0 to Pred(Size div BlockSize) do
           begin
-            BlockChecksum(MD2State,TBlocksArray(Buffer)[i]);
-            BlockHash(MD2State,TBlocksArray(Buffer)[i]);
+            BlockChecksum(MD2State,Buff^);
+            BlockHash(MD2State,Buff^);
+            Inc(Buff);
           end;
       end
     else raise Exception.CreateFmt('BufferMD2: Buffer size is not divisible by %d.',[BlockSize]);
@@ -252,18 +255,22 @@ end;
 
 Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TSize): TMD2Hash;
 var
-  FullBlocks:     Integer;
-  HelpBlocks:     Integer;
+  FullBlocks:     TSize;
+  HelpBlocks:     TSize;
   HelpBlocksBuff: Pointer;
 begin
 Result := ZeroMD2;
 FullBlocks := Size div BlockSize;
 BufferMD2(MD2State,Buffer,FullBlocks * BlockSize);
-HelpBlocks := Succ(Size div BlockSize) - Int64(FullBlocks);
+HelpBlocks := Succ(Size div BlockSize) - FullBlocks;
 HelpBlocksBuff := AllocMem(HelpBlocks * BlockSize);
 try
+  {$IFDEF x64}
+  FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,Byte(((FullBlocks + HelpBlocks) * BlockSize) - Size));
+  {$ELSE}
   FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,Byte(((Int64(FullBlocks) + HelpBlocks) * BlockSize) - Size));
-  Move(TByteArray(Buffer)[FullBlocks * BlockSize],HelpBlocksBuff^,Size - TSize(FullBlocks * BlockSize));
+  {$ENDIF}
+  Move({%H-}Pointer(PtrUInt(@Buffer) + (FullBlocks * BlockSize))^,HelpBlocksBuff^,Size - (FullBlocks * Int64(BlockSize)));
   BufferMD2(MD2State,HelpBlocksBuff^,HelpBlocks * BlockSize);
   BlockHash(MD2State,MD2State.Checksum);
   Move(MD2State.HashBuffer,Result,SizeOf(Result));
@@ -411,7 +418,7 @@ end;
 
 procedure MD2_Update(Context: TMD2Context; const Buffer; Size: TSize);
 var
-  FullBlocks:     Integer;
+  FullBlocks:     TSize;
   RemainingSize:  TSize;
 begin
 with PMD2Context_Internal(Context)^ do
@@ -424,7 +431,7 @@ with PMD2Context_Internal(Context)^ do
             BufferMD2(MD2State,TransferBuffer,BlockSize);
             RemainingSize := Size - (BlockSize - TransferSize);
             TransferSize := 0;
-            MD2_Update(Context,TByteArray(Buffer)[Size - RemainingSize],RemainingSize);
+            MD2_Update(Context,{%H-}Pointer(PtrUInt(@Buffer) + (Size - RemainingSize))^,RemainingSize);
           end
         else
           begin
@@ -438,8 +445,8 @@ with PMD2Context_Internal(Context)^ do
         BufferMD2(MD2State,Buffer,FullBlocks * BlockSize);
         If TSize(FullBlocks * BlockSize) < Size then
           begin
-            TransferSize := Size - TSize(FullBlocks * BlockSize);
-            Move(TByteArray(Buffer)[Size - TransferSize],TransferBuffer,TransferSize);
+            TransferSize := Size - (FullBlocks * Int64(BlockSize));
+            Move({%H-}Pointer(PtrUInt(@Buffer) + (Size - TransferSize))^,TransferBuffer,TransferSize)
           end;
       end;
   end;
