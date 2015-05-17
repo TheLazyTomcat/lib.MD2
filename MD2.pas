@@ -270,7 +270,7 @@ try
   {$ELSE}
   FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,Byte(((Int64(FullBlocks) + HelpBlocks) * BlockSize) - Size));
   {$ENDIF}
-  Move({%H-}Pointer(PtrUInt(@Buffer) + (FullBlocks * BlockSize))^,HelpBlocksBuff^,Size - (FullBlocks * Int64(BlockSize)));
+  Move({%H-}Pointer({%H-}PtrUInt(@Buffer) + (FullBlocks * BlockSize))^,HelpBlocksBuff^,Size - (FullBlocks * Int64(BlockSize)));
   BufferMD2(MD2State,HelpBlocksBuff^,HelpBlocks * BlockSize);
   BlockHash(MD2State,MD2State.Checksum);
   Move(MD2State.HashBuffer,Result,SizeOf(Result));
@@ -431,7 +431,7 @@ with PMD2Context_Internal(Context)^ do
             BufferMD2(MD2State,TransferBuffer,BlockSize);
             RemainingSize := Size - (BlockSize - TransferSize);
             TransferSize := 0;
-            MD2_Update(Context,{%H-}Pointer(PtrUInt(@Buffer) + (Size - RemainingSize))^,RemainingSize);
+            MD2_Update(Context,{%H-}Pointer({%H-}PtrUInt(@Buffer) + (Size - RemainingSize))^,RemainingSize);
           end
         else
           begin
@@ -446,7 +446,7 @@ with PMD2Context_Internal(Context)^ do
         If TSize(FullBlocks * BlockSize) < Size then
           begin
             TransferSize := Size - (FullBlocks * Int64(BlockSize));
-            Move({%H-}Pointer(PtrUInt(@Buffer) + (Size - TransferSize))^,TransferBuffer,TransferSize)
+            Move({%H-}Pointer({%H-}PtrUInt(@Buffer) + (Size - TransferSize))^,TransferBuffer,TransferSize)
           end;
       end;
   end;
