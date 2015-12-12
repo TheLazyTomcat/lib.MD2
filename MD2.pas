@@ -9,34 +9,25 @@
 
   MD2 Hash Calculation
 
-  ©František Milt 2015-05-06
+  ©František Milt 2015-12-12
 
-  Version 1.1.1
+  Version 1.1.2
 
 ===============================================================================}
 unit MD2;
 
 {$DEFINE LargeBuffers}
-{.$DEFINE UseStringStream}
 
 interface
 
 uses
-  Classes;
+  Classes, AuxTypes;
 
 const
   BlockSize = 16;  // 128 bits
 
 type
-{$IFDEF x64}
-  PtrUInt = UInt64;
-{$ELSE}
-  PtrUInt = LongWord;
-{$ENDIF}
-
-  TSize = PtrUInt;
-
-  TMD2Block = Array[0..Pred(BlockSize)] of Byte;
+  TMD2Block = array[0..Pred(BlockSize)] of UInt8;
   PMD2Block = ^TMD2Block;
 
   TMD2Hash = TMD2Block;
@@ -44,7 +35,7 @@ type
 
   TMD2State = record
     Checksum:   TMD2Block;
-    HashBuffer: Array[0..47] of Byte;
+    HashBuffer: array[0..47] of UInt8;
   end;
 
 const
@@ -62,10 +53,10 @@ Function TryStrToMD2(const Str: String; out Hash: TMD2Hash): Boolean;
 Function StrToMD2Def(const Str: String; Default: TMD2Hash): TMD2Hash;
 Function SameMD2(A,B: TMD2Hash): Boolean;
 
-procedure BufferMD2(var MD2State: TMD2State; const Buffer; Size: TSize); overload;
-Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TSize): TMD2Hash;
+procedure BufferMD2(var MD2State: TMD2State; const Buffer; Size: TMemSize); overload;
+Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TMemSize): TMD2Hash;
 
-Function BufferMD2(const Buffer; Size: TSize): TMD2Hash; overload;
+Function BufferMD2(const Buffer; Size: TMemSize): TMD2Hash; overload;
 
 Function AnsiStringMD2(const Str: AnsiString): TMD2Hash;
 Function WideStringMD2(const Str: WideString): TMD2Hash;
@@ -80,10 +71,10 @@ type
   TMD2Context = type Pointer;
 
 Function MD2_Init: TMD2Context;
-procedure MD2_Update(Context: TMD2Context; const Buffer; Size: TSize);
-Function MD2_Final(var Context: TMD2Context; const Buffer; Size: TSize): TMD2Hash; overload;
+procedure MD2_Update(Context: TMD2Context; const Buffer; Size: TMemSize);
+Function MD2_Final(var Context: TMD2Context; const Buffer; Size: TMemSize): TMD2Hash; overload;
 Function MD2_Final(var Context: TMD2Context): TMD2Hash; overload;
-Function MD2_Hash(const Buffer; Size: TSize): TMD2Hash;
+Function MD2_Hash(const Buffer; Size: TMemSize): TMD2Hash;
 
 
 implementation
@@ -99,7 +90,7 @@ const
 {$ENDIF}
   BufferSize      = BlocksPerBuffer * BlockSize;  // Size of read buffer
 
-  PiTable: Array[Byte] of Byte =(
+  PiTable: Array[UInt8] of UInt8 =(
     $29, $2E, $43, $C9, $A2, $D8, $7C, $01, $3D, $36, $54, $A1, $EC, $F0, $06, $13,
     $62, $A7, $05, $F3, $C0, $C7, $73, $8C, $98, $93, $2B, $D9, $BC, $4C, $82, $CA,
     $1E, $9B, $57, $3C, $FD, $D4, $E0, $16, $67, $42, $6F, $18, $8A, $17, $E5, $12,
@@ -120,7 +111,7 @@ const
 type
   TMD2Context_Internal = record
     MD2State:       TMD2State;
-    TransferSize:   LongWord;
+    TransferSize:   UInt32;
     TransferBuffer: TMD2Block;
   end;
   PMD2Context_Internal = ^TMD2Context_Internal;
@@ -130,7 +121,7 @@ type
 procedure BlockChecksum(var MD2State: TMD2State; const Block: TMD2Block);
 var
   i:      Integer;
-  State:  Byte;
+  State:  UInt8;
 begin
 State := MD2State.Checksum[Pred(BlockSize)];
 For i := 0 to Pred(BlockSize) do
@@ -145,7 +136,7 @@ end;
 procedure BlockHash(var MD2State: TMD2State; const Block: TMD2Block);
 var
   i,j,k:    Integer;
-  PiIndex:  Byte;
+  PiIndex:  UInt8;
 begin
 For i := 0 to Pred(BlockSize) do
   begin
@@ -160,7 +151,7 @@ For j := 0 to 17 do
         MD2State.HashBuffer[k] := MD2State.HashBuffer[k] xor PiTable[PiIndex];
         PiIndex := MD2State.HashBuffer[k];
       end;
-    PiIndex := Byte(Integer(PiIndex) + j);
+    PiIndex := UInt8(Int32(PiIndex) + j);
   end;
 end;
 
@@ -230,9 +221,9 @@ end;
 
 //==============================================================================
 
-procedure BufferMD2(var MD2State: TMD2State; const Buffer; Size: TSize);
+procedure BufferMD2(var MD2State: TMD2State; const Buffer; Size: TMemSize);
 var
-  i:    TSize;
+  i:    TMemSize;
   Buff: PMD2Block;
 begin
 If Size > 0 then
@@ -253,10 +244,10 @@ end;
 
 //------------------------------------------------------------------------------
 
-Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TSize): TMD2Hash;
+Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TMemSize): TMD2Hash;
 var
-  FullBlocks:     TSize;
-  HelpBlocks:     TSize;
+  FullBlocks:     TMemSize;
+  HelpBlocks:     TMemSize;
   HelpBlocksBuff: Pointer;
 begin
 Result := ZeroMD2;
@@ -266,9 +257,9 @@ HelpBlocks := Succ(Size div BlockSize) - FullBlocks;
 HelpBlocksBuff := AllocMem(HelpBlocks * BlockSize);
 try
   {$IFDEF x64}
-  FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,Byte(((FullBlocks + HelpBlocks) * BlockSize) - Size));
+  FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,UInt8(((FullBlocks + HelpBlocks) * BlockSize) - Size));
   {$ELSE}
-  FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,Byte(((Int64(FullBlocks) + HelpBlocks) * BlockSize) - Size));
+  FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,UInt8(((Int64(FullBlocks) + HelpBlocks) * BlockSize) - Size));
   {$ENDIF}
   Move({%H-}Pointer({%H-}PtrUInt(@Buffer) + (FullBlocks * BlockSize))^,HelpBlocksBuff^,Size - (FullBlocks * Int64(BlockSize)));
   BufferMD2(MD2State,HelpBlocksBuff^,HelpBlocks * BlockSize);
@@ -281,7 +272,7 @@ end;
 
 //==============================================================================
 
-Function BufferMD2(const Buffer; Size: TSize): TMD2Hash;
+Function BufferMD2(const Buffer; Size: TMemSize): TMD2Hash;
 begin
 Result := LastBufferMD2(InitialMD2State,Buffer,Size);
 end;
@@ -416,10 +407,10 @@ end;
 
 //------------------------------------------------------------------------------
 
-procedure MD2_Update(Context: TMD2Context; const Buffer; Size: TSize);
+procedure MD2_Update(Context: TMD2Context; const Buffer; Size: TMemSize);
 var
-  FullBlocks:     TSize;
-  RemainingSize:  TSize;
+  FullBlocks:     TMemSize;
+  RemainingSize:  TMemSize;
 begin
 with PMD2Context_Internal(Context)^ do
   begin
@@ -443,7 +434,7 @@ with PMD2Context_Internal(Context)^ do
       begin
         FullBlocks := Size div BlockSize;
         BufferMD2(MD2State,Buffer,FullBlocks * BlockSize);
-        If TSize(FullBlocks * BlockSize) < Size then
+        If TMemSize(FullBlocks * BlockSize) < Size then
           begin
             TransferSize := Size - (FullBlocks * Int64(BlockSize));
             Move({%H-}Pointer({%H-}PtrUInt(@Buffer) + (Size - TransferSize))^,TransferBuffer,TransferSize)
@@ -454,7 +445,7 @@ end;
 
 //------------------------------------------------------------------------------
 
-Function MD2_Final(var Context: TMD2Context; const Buffer; Size: TSize): TMD2Hash;
+Function MD2_Final(var Context: TMD2Context; const Buffer; Size: TMemSize): TMD2Hash;
 begin
 MD2_Update(Context,Buffer,Size);
 Result := MD2_Final(Context);
@@ -473,7 +464,7 @@ end;
 
 //------------------------------------------------------------------------------
 
-Function MD2_Hash(const Buffer; Size: TSize): TMD2Hash;
+Function MD2_Hash(const Buffer; Size: TMemSize): TMD2Hash;
 begin
 Result := LastBufferMD2(InitialMD2State,Buffer,Size);
 end;
