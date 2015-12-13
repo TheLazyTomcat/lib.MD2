@@ -9,9 +9,9 @@
 
   MD2 Hash Calculation
 
-  ©František Milt 2015-12-12
+  ©František Milt 2015-12-13
 
-  Version 1.1.2
+  Version 1.1.3
 
 ===============================================================================}
 unit MD2;
@@ -256,11 +256,7 @@ BufferMD2(MD2State,Buffer,FullBlocks * BlockSize);
 HelpBlocks := Succ(Size div BlockSize) - FullBlocks;
 HelpBlocksBuff := AllocMem(HelpBlocks * BlockSize);
 try
-  {$IFDEF x64}
-  FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,UInt8(((FullBlocks + HelpBlocks) * BlockSize) - Size));
-  {$ELSE}
-  FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,UInt8(((Int64(FullBlocks) + HelpBlocks) * BlockSize) - Size));
-  {$ENDIF}
+  FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,UInt8(((UInt64(FullBlocks) + HelpBlocks) * BlockSize) - Size));
   Move({%H-}Pointer({%H-}PtrUInt(@Buffer) + (FullBlocks * BlockSize))^,HelpBlocksBuff^,Size - (FullBlocks * Int64(BlockSize)));
   BufferMD2(MD2State,HelpBlocksBuff^,HelpBlocks * BlockSize);
   BlockHash(MD2State,MD2State.Checksum);
