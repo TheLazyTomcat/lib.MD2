@@ -80,7 +80,14 @@ Function MD2_Hash(const Buffer; Size: TMemSize): TMD2Hash;
 implementation
 
 uses
-  SysUtils;
+  SysUtils
+  {$IF Defined(FPC) and not Defined(Unicode)}
+  (*
+    If compiler throws error that LazUTF8 unit cannot be found, you have to
+    add LazUtils to required packages (Project > Project Inspector).
+  *)
+  , LazUTF8
+  {$IFEND};
 
 const
 {$IFDEF LargeBuffers}
@@ -381,7 +388,11 @@ Function FileMD2(const FileName: String): TMD2Hash;
 var
   FileStream: TFileStream;
 begin
+{$IF Defined(FPC) and not Defined(Unicode)}
+FileStream := TFileStream.Create(UTF8ToSys(FileName), fmOpenRead or fmShareDenyWrite);
+{$ELSE}
 FileStream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+{$IFEND}
 try
   Result := StreamMD2(FileStream);
 finally
