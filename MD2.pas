@@ -9,9 +9,9 @@
 
   MD2 Hash Calculation
 
-  ©František Milt 2015-12-13
+  ©František Milt 2016-03-01
 
-  Version 1.1.3
+  Version 1.1.4
 
 ===============================================================================}
 unit MD2;
