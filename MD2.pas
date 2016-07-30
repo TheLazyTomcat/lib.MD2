@@ -291,62 +291,23 @@ end;
 //==============================================================================
 
 Function AnsiStringMD2(const Str: AnsiString): TMD2Hash;
-{$IFDEF UseStringStream}
-var
-  StringStream: TStringStream;
-begin
-StringStream := TStringStream.Create(Str);
-try
-  Result := StreamMD2(StringStream);
-finally
-  StringStream.Free;
-end;
-end;
-{$ELSE}
 begin
 Result := BufferMD2(PAnsiChar(Str)^,Length(Str) * SizeOf(AnsiChar));
 end;
-{$ENDIF}
 
 //------------------------------------------------------------------------------
 
 Function WideStringMD2(const Str: WideString): TMD2Hash;
-{$IFDEF UseStringStream}
-var
-  StringStream: TStringStream;
-begin
-StringStream := TStringStream.Create(Str);
-try
-  Result := StreamMD2(StringStream);
-finally
-  StringStream.Free;
-end;
-end;
-{$ELSE}
 begin
 Result := BufferMD2(PWideChar(Str)^,Length(Str) * SizeOf(WideChar));
 end;
-{$ENDIF}
 
 //------------------------------------------------------------------------------
 
 Function StringMD2(const Str: String): TMD2Hash;
-{$IFDEF UseStringStream}
-var
-  StringStream: TStringStream;
-begin
-StringStream := TStringStream.Create(Str);
-try
-  Result := StreamMD2(StringStream);
-finally
-  StringStream.Free;
-end;
-end;
-{$ELSE}
 begin
 Result := BufferMD2(PChar(Str)^,Length(Str) * SizeOf(Char));
 end;
-{$ENDIF}
 
 //==============================================================================
 
