@@ -9,9 +9,9 @@
 
   MD2 Hash Calculation
 
-  ©František Milt 2016-03-01
+  ©František Milt 2016-07-30
 
-  Version 1.1.4
+  Version 1.1.5
 
 ===============================================================================}
 unit MD2;
@@ -52,6 +52,7 @@ Function StrToMD2(Str: String): TMD2Hash;
 Function TryStrToMD2(const Str: String; out Hash: TMD2Hash): Boolean;
 Function StrToMD2Def(const Str: String; Default: TMD2Hash): TMD2Hash;
 Function SameMD2(A,B: TMD2Hash): Boolean;
+Function BinaryCorrectMD2(Hash: TMD2Hash): TMD2Hash;
 
 procedure BufferMD2(var MD2State: TMD2State; const Buffer; Size: TMemSize); overload;
 Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TMemSize): TMD2Hash;
@@ -224,6 +225,13 @@ For i := Low(TMD2Hash) to High(TMD2Hash) do
       Result := False;
       Break;
     end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function BinaryCorrectMD2(Hash: TMD2Hash): TMD2Hash;
+begin
+Result := Hash;
 end;
 
 //==============================================================================
