@@ -9,9 +9,9 @@
 
   MD2 Hash Calculation
 
-  ©František Milt 2017-07-18
+  ©František Milt 2018-10-22
 
-  Version 1.1.6
+  Version 1.1.7
 
   Dependencies:
     AuxTypes - github.com/ncs-sniper/Lib.AuxTypes
@@ -24,8 +24,16 @@ unit MD2;
 
 {$IFDEF FPC}
   {$MODE ObjFPC}{$H+}
+  {$INLINE ON}
+  {$DEFINE CanInline}
   {$DEFINE FPC_DisableWarns}
   {$MACRO ON}
+{$ELSE}
+  {$IF CompilerVersion >= 17 then}  // Delphi 2005+
+    {$DEFINE CanInline}
+  {$ELSE}
+    {$UNDEF CanInline}
+  {$IFEND}
 {$ENDIF}
 
 interface
@@ -61,17 +69,20 @@ Function MD2toStr(Hash: TMD2Hash): String;
 Function StrToMD2(Str: String): TMD2Hash;
 Function TryStrToMD2(const Str: String; out Hash: TMD2Hash): Boolean;
 Function StrToMD2Def(const Str: String; Default: TMD2Hash): TMD2Hash;
+
+Function CompareMD2(A,B: TMD2Hash): Integer;
 Function SameMD2(A,B: TMD2Hash): Boolean;
-Function BinaryCorrectMD2(Hash: TMD2Hash): TMD2Hash;
+
+Function BinaryCorrectMD2(Hash: TMD2Hash): TMD2Hash;{$IFDEF CanInline} inline; {$ENDIF}
 
 procedure BufferMD2(var MD2State: TMD2State; const Buffer; Size: TMemSize); overload;
 Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TMemSize): TMD2Hash;
 
 Function BufferMD2(const Buffer; Size: TMemSize): TMD2Hash; overload;
 
-Function AnsiStringMD2(const Str: AnsiString): TMD2Hash;
-Function WideStringMD2(const Str: WideString): TMD2Hash;
-Function StringMD2(const Str: String): TMD2Hash;
+Function AnsiStringMD2(const Str: AnsiString): TMD2Hash;{$IFDEF CanInline} inline; {$ENDIF}
+Function WideStringMD2(const Str: WideString): TMD2Hash;{$IFDEF CanInline} inline; {$ENDIF}
+Function StringMD2(const Str: String): TMD2Hash;{$IFDEF CanInline} inline; {$ENDIF}
 
 Function StreamMD2(Stream: TStream; Count: Int64 = -1): TMD2Hash;
 Function FileMD2(const FileName: String): TMD2Hash;
@@ -228,6 +239,26 @@ Function StrToMD2Def(const Str: String; Default: TMD2Hash): TMD2Hash;
 begin
 If not TryStrToMD2(Str,Result) then
   Result := Default;
+end;
+
+//------------------------------------------------------------------------------
+
+Function CompareMD2(A,B: TMD2Hash): Integer;
+var
+  i:  Integer;
+begin
+Result := 0;
+For i := Low(TMD2Hash) to High(TMD2Hash) do
+  If A[i] > B[i] then
+    begin
+      Result := -1;
+      Break;
+    end
+  else If A[i] < B[i] then
+    begin
+      Result := 1;
+      Break;
+    end;
 end;
 
 //------------------------------------------------------------------------------
