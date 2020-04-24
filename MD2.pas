@@ -7,85 +7,167 @@
 -------------------------------------------------------------------------------}
 {===============================================================================
 
-  MD2 Hash Calculation
+  MD2 calculation
 
-  ©František Milt 2018-10-22
+  Version 1.2 (2020-04-24)
 
-  Version 1.1.7
+  Last change 2020-04-24
+
+  ©2015-2020 František Milt
+
+  Contacts:
+    František Milt: frantisek.milt@gmail.com
+
+  Support:
+    If you find this code useful, please consider supporting its author(s) by
+    making a small donation using the following link(s):
+
+      https://www.paypal.me/FMilt
+
+  Changelog:
+    For detailed changelog and history please refer to this git repository:
+
+      github.com/TheLazyTomcat/Lib.MD2
 
   Dependencies:
-    AuxTypes - github.com/ncs-sniper/Lib.AuxTypes
-    StrRect  - github.com/ncs-sniper/Lib.StrRect
+    AuxTypes           - github.com/TheLazyTomcat/Lib.AuxTypes
+    HashBase           - github.com/TheLazyTomcat/Lib.HashBase
+    AuxClasses         - github.com/TheLazyTomcat/Lib.AuxClasses
+    StrRect            - github.com/TheLazyTomcat/Lib.StrRect
+    StaticMemoryStream - github.com/TheLazyTomcat/Lib.StaticMemoryStream
 
 ===============================================================================}
 unit MD2;
 
-{$DEFINE LargeBuffers}
-
 {$IFDEF FPC}
-  {$MODE ObjFPC}{$H+}
-  {$INLINE ON}
-  {$DEFINE CanInline}
+  {$MODE Delphi}
   {$DEFINE FPC_DisableWarns}
   {$MACRO ON}
-{$ELSE}
-  {$IF CompilerVersion >= 17 then}  // Delphi 2005+
-    {$DEFINE CanInline}
-  {$ELSE}
-    {$UNDEF CanInline}
-  {$IFEND}
 {$ENDIF}
 
 interface
 
 uses
-  Classes, AuxTypes;
+  Classes,
+  AuxTypes, HashBase;
+
+{===============================================================================
+    Common types and constants
+===============================================================================}
+{
+  Note that type TMD2 contains individual bytes of the checksum in the same
+  order as they are presented in its textual representation.
+  
+  Type TMD2Sys has no such guarantee and its internal structure depends on
+  current implementation.
+
+  MD2 does not differ in little and big endian form, as it is not a single
+  quantity, therefore methods like MD2ToLE or MD2ToBE do nothing and are
+  present only for the sake of completeness.
+}
+type
+  TMD2 = array[0..15] of UInt8;
+  PMD2 = ^TMD2;
+
+  TMD2Sys = type TMD2;
+  PMD2Sys = ^TMD2Sys;
 
 const
-  BlockSize = 16;  // 128 bits
+  InitialMD2: TMD2 = ($00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00);
+  ZeroMD2:    TMD2 = ($00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00);
 
 type
-  TMD2Block = array[0..Pred(BlockSize)] of UInt8;
-  PMD2Block = ^TMD2Block;
+  EMD2Exception = class(EHashException);
 
-  TMD2Hash = TMD2Block;
-  PMD2Hash = ^TMD2Hash;
+  EMD2IncompatibleClass = class(EMD2Exception);
+  EMD2ProcessingError   = class(EMD2Exception);
 
-  TMD2State = record
-    Checksum:   TMD2Block;
-    HashBuffer: array[0..47] of UInt8;
+{-------------------------------------------------------------------------------
+================================================================================
+                                    TMD2Hash
+================================================================================
+-------------------------------------------------------------------------------}
+{===============================================================================
+    TMD2Hash - class declaration
+===============================================================================}
+type
+  TMD2Hash = class(TBlockHash)
+  private
+    fChecksum:  TMD2Sys;
+    fMD2:       TMD2Sys;
+    Function GetMD2: TMD2;
+  protected
+    procedure BlockChecksum(const Block); virtual;
+    procedure BlockHash(const Block); virtual;
+    procedure ProcessBlock(const Block); override;
+    procedure ProcessFirst(const Block); override;
+    procedure ProcessLast; override;
+    procedure Initialize; override;
+  public
+    class Function MD2ToSys(MD2: TMD2): TMD2Sys; virtual;
+    class Function MD2FromSys(MD2: TMD2Sys): TMD2; virtual;
+    class Function MD2ToLE(MD2: TMD2): TMD2; virtual;
+    class Function MD2ToBE(MD2: TMD2): TMD2; virtual;
+    class Function MD2FromLE(MD2: TMD2): TMD2; virtual;
+    class Function MD2FromBE(MD2: TMD2): TMD2; virtual;
+    class Function HashSize: TMemSize; override;
+    class Function HashName: String; override;
+    class Function HashEndianness: THashEndianness; override;
+    constructor CreateAndInitFrom(Hash: THashBase); overload; override;
+    constructor CreateAndInitFrom(Hash: TMD2); overload; virtual;
+    procedure Init; override;
+    Function Compare(Hash: THashBase): Integer; override;
+    Function AsString: String; override;
+    procedure FromString(const Str: String); override;
+    procedure FromStringDef(const Str: String; const Default: TMD2); reintroduce;
+    procedure SaveToStream(Stream: TStream; Endianness: THashEndianness = heDefault); override;
+    procedure LoadFromStream(Stream: TStream; Endianness: THashEndianness = heDefault); override;
+    property MD2: TMD2 read GetMD2;
+    property MD2Sys: TMD2Sys read fMD2;
+    property Checksum: TMD2Sys read fChecksum write fChecksum;
   end;
+
+{===============================================================================
+    Backward compatibility functions
+===============================================================================}
+{
+  For MD2, it is not enough to pass hash from previous step when doing
+  continuous hashing (BufferMD2 > LastBufferMD2). TMD2State type is introduced
+  for this purpose.
+}
+type
+  TMD2State = record
+    Checksum: TMD2Sys;
+    Hash:     TMD2Sys;
+  end;
+  PMD2State = ^TMD2State;
 
 const
   InitialMD2State: TMD2State = (
-    Checksum:   (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
-    HashBuffer: (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-                 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-                 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0));
+    Checksum: (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+    Hash:     (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0));
 
-  ZeroMD2: TMD2Hash = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+Function MD2toStr(MD2: TMD2): String;
+Function StrToMD2(Str: String): TMD2;
+Function TryStrToMD2(const Str: String; out MD2: TMD2): Boolean;
+Function StrToMD2Def(const Str: String; Default: TMD2): TMD2;
 
-Function MD2toStr(Hash: TMD2Hash): String;
-Function StrToMD2(Str: String): TMD2Hash;
-Function TryStrToMD2(const Str: String; out Hash: TMD2Hash): Boolean;
-Function StrToMD2Def(const Str: String; Default: TMD2Hash): TMD2Hash;
+Function CompareMD2(A,B: TMD2): Integer;
+Function SameMD2(A,B: TMD2): Boolean;
 
-Function CompareMD2(A,B: TMD2Hash): Integer;
-Function SameMD2(A,B: TMD2Hash): Boolean;
-
-Function BinaryCorrectMD2(Hash: TMD2Hash): TMD2Hash;{$IFDEF CanInline} inline; {$ENDIF}
+Function BinaryCorrectMD2(MD2: TMD2): TMD2;
 
 procedure BufferMD2(var MD2State: TMD2State; const Buffer; Size: TMemSize); overload;
-Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TMemSize): TMD2Hash;
+Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TMemSize): TMD2;
 
-Function BufferMD2(const Buffer; Size: TMemSize): TMD2Hash; overload;
+Function BufferMD2(const Buffer; Size: TMemSize): TMD2; overload;
 
-Function AnsiStringMD2(const Str: AnsiString): TMD2Hash;{$IFDEF CanInline} inline; {$ENDIF}
-Function WideStringMD2(const Str: WideString): TMD2Hash;{$IFDEF CanInline} inline; {$ENDIF}
-Function StringMD2(const Str: String): TMD2Hash;{$IFDEF CanInline} inline; {$ENDIF}
+Function AnsiStringMD2(const Str: AnsiString): TMD2;
+Function WideStringMD2(const Str: WideString): TMD2;
+Function StringMD2(const Str: String): TMD2;
 
-Function StreamMD2(Stream: TStream; Count: Int64 = -1): TMD2Hash;
-Function FileMD2(const FileName: String): TMD2Hash;
+Function StreamMD2(Stream: TStream; Count: Int64 = -1): TMD2;
+Function FileMD2(const FileName: String): TMD2;
 
 //------------------------------------------------------------------------------
 
@@ -94,38 +176,31 @@ type
 
 Function MD2_Init: TMD2Context;
 procedure MD2_Update(Context: TMD2Context; const Buffer; Size: TMemSize);
-Function MD2_Final(var Context: TMD2Context; const Buffer; Size: TMemSize): TMD2Hash; overload;
-Function MD2_Final(var Context: TMD2Context): TMD2Hash; overload;
-Function MD2_Hash(const Buffer; Size: TMemSize): TMD2Hash;
-
+Function MD2_Final(var Context: TMD2Context; const Buffer; Size: TMemSize): TMD2; overload;
+Function MD2_Final(var Context: TMD2Context): TMD2; overload;
+Function MD2_Hash(const Buffer; Size: TMemSize): TMD2;
 
 implementation
 
 uses
-  SysUtils, StrRect;
+  SysUtils;
 
 {$IFDEF FPC_DisableWarns}
   {$DEFINE FPCDWM}
   {$DEFINE W4055:={$WARN 4055 OFF}} // Conversion between ordinals and pointers is not portable
-  {$DEFINE W4056:={$WARN 4056 OFF}} // Conversion between ordinals and pointers is not portable
-  {$PUSH}{$WARN 2005 OFF} // Comment level $1 found
-  {$IF Defined(FPC) and (FPC_FULLVERSION >= 30000)}
-    {$DEFINE W5092:={$WARN 5092 OFF}} // Variable "$1" of a managed type does not seem to be initialized
-  {$ELSE}
-    {$DEFINE W5092:=}
-  {$IFEND}
-  {$POP}
+  {$DEFINE W5057:={$WARN 5057 OFF}} // Local variable "$1" does not seem to be initialized
 {$ENDIF}
 
+{-------------------------------------------------------------------------------
+================================================================================
+                                    TMD2Hash
+================================================================================
+-------------------------------------------------------------------------------}
+{===============================================================================
+    TMD2Hash - calculation constants
+===============================================================================}
 const
-{$IFDEF LargeBuffers}
-  BlocksPerBuffer = 65536;                        // 1MiB BufferSize
-{$ELSE}
-  BlocksPerBuffer = 256;                          // 4KiB BufferSize
-{$ENDIF}
-  BufferSize      = BlocksPerBuffer * BlockSize;  // Size of read buffer
-
-  PiTable: Array[UInt8] of UInt8 =(
+  MD2_PI_TABLE: array[UInt8] of UInt8 =(
     $29, $2E, $43, $C9, $A2, $D8, $7C, $01, $3D, $36, $54, $A1, $EC, $F0, $06, $13,
     $62, $A7, $05, $F3, $C0, $C7, $73, $8C, $98, $93, $2B, $D9, $BC, $4C, $82, $CA,
     $1E, $9B, $57, $3C, $FD, $D4, $E0, $16, $67, $42, $6F, $18, $8A, $17, $E5, $12,
@@ -143,357 +218,603 @@ const
     $F2, $EF, $B7, $0E, $66, $58, $D0, $E4, $A6, $77, $72, $F8, $EB, $75, $4B, $0A,
     $31, $44, $50, $B4, $8F, $ED, $1F, $1A, $DB, $99, $8D, $33, $9F, $11, $83, $14);
 
-type
-  TMD2Context_Internal = record
-    MD2State:       TMD2State;
-    TransferSize:   UInt32;
-    TransferBuffer: TMD2Block;
-  end;
-  PMD2Context_Internal = ^TMD2Context_Internal;
+{===============================================================================
+    TMD2Hash - class implementation
+===============================================================================}
+{-------------------------------------------------------------------------------
+    TMD2Hash - private methods
+-------------------------------------------------------------------------------}
 
-//==============================================================================
-
-procedure BlockChecksum(var MD2State: TMD2State; const Block: TMD2Block);
-var
-  i:      Integer;
-  State:  UInt8;
+Function TMD2Hash.GetMD2: TMD2;
 begin
-State := MD2State.Checksum[Pred(BlockSize)];
-For i := 0 to Pred(BlockSize) do
+Result := MD2FromSys(fMD2);
+end;
+
+{-------------------------------------------------------------------------------
+    TMD2Hash - protected methods
+-------------------------------------------------------------------------------}
+
+procedure TMD2Hash.BlockChecksum(const Block);
+var
+  Temp:     UInt8;
+  i:        Integer;
+  BlockArr: TMD2Sys absolute Block;
+begin
+Temp := fChecksum[High(fChecksum)];
+For i := Low(fChecksum) to High(fChecksum) do
   begin
-    MD2State.Checksum[i] := MD2State.Checksum[i] xor PiTable[Block[i] xor State];
-    State := MD2State.Checksum[i];
+    fChecksum[i] := fChecksum[i] xor MD2_PI_TABLE[BlockArr[i] xor Temp];
+    Temp := fChecksum[i];
   end;
 end;
 
 //------------------------------------------------------------------------------
 
-procedure BlockHash(var MD2State: TMD2State; const Block: TMD2Block);
+procedure TMD2Hash.BlockHash(const Block);
 var
-  i,j,k:    Integer;
+  i,j:      Integer;
   PiIndex:  UInt8;
+  State:    array[0..47] of UInt8;  // 3 * Length(TMD2)
+  BlockArr: TMD2Sys absolute Block;
 begin
-For i := 0 to Pred(BlockSize) do
+PMD2Sys(@State)^ := fMD2;
+For i := Low(TMD2Sys) to High(TMD2Sys) do
   begin
-    MD2State.HashBuffer[BlockSize + i] := Block[i];
-    MD2State.HashBuffer[(BlockSize * 2) + i] := Block[i] xor MD2State.HashBuffer[i];
+    State[Length(BlockArr) + i] := BlockArr[i];
+    State[(Length(BlockArr) * 2) + i] := BlockArr[i] xor State[i];
   end;
 PiIndex := 0;
-For j := 0 to 17 do
+For i := 0 to 17 do
   begin
-    For k := Low(MD2State.HashBuffer) to High(MD2State.HashBuffer) do
+    For j := Low(State) to High(State) do
       begin
-        MD2State.HashBuffer[k] := MD2State.HashBuffer[k] xor PiTable[PiIndex];
-        PiIndex := MD2State.HashBuffer[k];
+        State[j] := State[j] xor MD2_PI_TABLE[PiIndex];
+        PiIndex := State[j];
       end;
-    PiIndex := UInt8(Int32(PiIndex) + j);
+    PiIndex := UInt8(Int32(PiIndex) + i);
   end;
+fMD2 := PMD2Sys(@State)^;
 end;
 
-//==============================================================================
+//------------------------------------------------------------------------------
 
-Function MD2toStr(Hash: TMD2Hash): String;
-var
-  i:  Integer;
+procedure TMD2Hash.ProcessBlock(const Block);
 begin
-Result := StringOfChar('0',32);
-For i := Low(Hash) to High(Hash) do
+BlockChecksum(Block);
+BlockHash(Block);
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD2Hash.ProcessFirst(const Block);
+begin
+inherited;
+ProcessBlock(Block);
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD2Hash.ProcessLast;
+begin
+{$IFDEF FPCDWM}{$PUSH}W4055{$ENDIF}
+FillChar(Pointer(PtrUInt(fTempBlock) + PtrUInt(fTempCount))^,fBlockSize - fTempCount,UInt8(fBlockSize - fTempCount));
+{$IFDEF FPCDWM}{$POP}{$ENDIF}
+ProcessBlock(fTempBlock^);
+BlockHash(fChecksum);
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD2Hash.Initialize;
+begin
+fBlockSize := 16; // 128 bits
+inherited;
+fCheckSum := MD2ToSys(ZeroMD2);
+fMD2 := MD2ToSys(ZeroMD2);
+end;
+
+{-------------------------------------------------------------------------------
+    TMD2Hash - public methods
+-------------------------------------------------------------------------------}
+
+class Function TMD2Hash.MD2ToSys(MD2: TMD2): TMD2Sys;
+var
+  Temp: TMD2Sys absolute MD2;
+begin
+Result := Temp;
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD2Hash.MD2FromSys(MD2: TMD2Sys): TMD2;
+var
+  Temp: TMD2Sys absolute Result;
+begin
+Temp := MD2;
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD2Hash.MD2ToLE(MD2: TMD2): TMD2;
+begin
+Result := MD2;
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD2Hash.MD2ToBE(MD2: TMD2): TMD2;
+begin
+Result := MD2;
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD2Hash.MD2FromLE(MD2: TMD2): TMD2;
+begin
+Result := MD2;
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD2Hash.MD2FromBE(MD2: TMD2): TMD2;
+begin
+Result := MD2;
+end;
+ 
+//------------------------------------------------------------------------------
+
+class Function TMD2Hash.HashSize: TMemSize;
+begin
+Result := SizeOf(TMD2);
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD2Hash.HashName: String;
+begin
+Result := 'MD2';
+end;
+
+//------------------------------------------------------------------------------
+
+class Function TMD2Hash.HashEndianness: THashEndianness;
+begin
+// first byte is most significant
+Result := heBig;
+end;
+
+//------------------------------------------------------------------------------
+
+constructor TMD2Hash.CreateAndInitFrom(Hash: THashBase);
+begin
+inherited CreateAndInitFrom(Hash);
+If Hash is TMD2Hash then
   begin
-    Result[(i * 2) + 2] := IntToHex(Hash[i] and $0F,1)[1];
-    Result[(i * 2) + 1] := IntToHex(Hash[i] shr 4,1)[1];
+    fMD2 := TMD2Hash(Hash).MD2Sys;
+    fChecksum := TMD2Hash(Hash).Checksum;
+  end
+else
+  raise EMD2IncompatibleClass.CreateFmt('TMD2Hash.CreateAndInitFrom: Incompatible class (%s).',[Hash.ClassName]);
+end;
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+constructor TMD2Hash.CreateAndInitFrom(Hash: TMD2);
+begin
+CreateAndInit;
+fMD2 := MD2ToSys(Hash);
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD2Hash.Init;
+begin
+inherited;
+fCheckSum := MD2ToSys(ZeroMD2);
+fMD2 := MD2toSys(InitialMD2);
+end;
+
+//------------------------------------------------------------------------------
+
+Function TMD2Hash.Compare(Hash: THashBase): Integer;
+var
+  A,B:  TMD2;
+  i:    Integer;
+begin
+If Hash is TMD2Hash then
+  begin
+    Result := 0;
+    A := MD2FromSys(fMD2);
+    B := TMD2Hash(Hash).MD2;
+    For i := Low(A) to High(A) do
+      If A[i] > B[i] then
+        begin
+          Result := +1;
+          Break;
+        end
+      else If A[i] < B[i] then
+        begin
+          Result := -1;
+          Break;
+        end;
+  end
+else raise EMD2IncompatibleClass.CreateFmt('TMD2Hash.Compare: Incompatible class (%s).',[Hash.ClassName]);
+end;
+
+//------------------------------------------------------------------------------
+
+Function TMD2Hash.AsString: String;
+var
+  Temp: TMD2;
+  i:    Integer;
+begin
+Result := StringOfChar('0',HashSize * 2);
+Temp := MD2FromSys(fMD2);
+For i := Low(Temp) to High(Temp) do
+  begin
+    Result[(i * 2) + 2] := IntToHex(Temp[i] and $0F,1)[1];
+    Result[(i * 2) + 1] := IntToHex(Temp[i] shr 4,1)[1];
   end;
 end;
 
 //------------------------------------------------------------------------------
 
-{$IFDEF FPCDWM}{$PUSH}W5092{$ENDIF}
-Function StrToMD2(Str: String): TMD2Hash;
+procedure TMD2Hash.FromString(const Str: String);
 var
-  i:  Integer;
+  TempStr:  String;
+  i:        Integer;
+  MD2:      TMD2;
 begin
-If Length(Str) < 32 then
-  Str := StringOfChar('0',32 - Length(Str)) + Str
+If Length(Str) < Integer(HashSize * 2) then
+  TempStr := StringOfChar('0',Integer(HashSize * 2) - Length(Str)) + Str
+else If Length(Str) > Integer(HashSize * 2) then
+  TempStr := Copy(Str,Length(Str) - Pred(Integer(HashSize * 2)),Integer(HashSize * 2))
 else
-  If Length(Str) > 32 then
-    Str := Copy(Str,Length(Str) - 31,32);
-For i := 0 to 15 do
-  Result[i] := StrToInt('$' + Copy(Str,(i * 2) + 1,2));
+  TempStr := Str;
+For i := Low(MD2) to High(MD2) do
+  MD2[i] := UInt8(StrToInt('$' + Copy(TempStr,(i * 2) + 1,2)));
+fMD2 := MD2ToSys(MD2);
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD2Hash.FromStringDef(const Str: String; const Default: TMD2);
+begin
+inherited FromStringDef(Str,Default);
+If not TryFromString(Str) then
+  fMD2 := MD2ToSys(Default);
+end;
+
+//------------------------------------------------------------------------------
+
+procedure TMD2Hash.SaveToStream(Stream: TStream; Endianness: THashEndianness = heDefault);
+var
+  Temp: TMD2;
+begin
+case Endianness of
+  heSystem: Temp := {$IFDEF ENDIAN_BIG}MD2ToBE{$ELSE}MD2ToLE{$ENDIF}(MD2FromSys(fMD2));
+  heLittle: Temp := MD2ToLE(MD2FromSys(fMD2));
+  heBig:    Temp := MD2ToBE(MD2FromSys(fMD2));
+else
+ {heDefault}
+  Temp := MD2FromSys(fMD2);
+end;
+Stream.WriteBuffer(Temp,SizeOf(TMD2));
+end;
+
+//------------------------------------------------------------------------------
+
+{$IFDEF FPCDWM}{$PUSH}W5057{$ENDIF}
+procedure TMD2Hash.LoadFromStream(Stream: TStream; Endianness: THashEndianness = heDefault);
+var
+  Temp: TMD2;
+begin
+Stream.ReadBuffer(Temp,SizeOf(TMD2));
+case Endianness of
+  heSystem: fMD2 := MD2ToSys({$IFDEF ENDIAN_BIG}MD2FromBE{$ELSE}MD2FromLE{$ENDIF}(Temp));
+  heLittle: fMD2 := MD2ToSys(MD2FromLE(Temp));
+  heBig:    fMD2 := MD2ToSys(MD2FromBE(Temp));
+else
+ {heDefault}
+  fMD2 := MD2ToSys(Temp);
+end;
 end;
 {$IFDEF FPCDWM}{$POP}{$ENDIF}
 
-//------------------------------------------------------------------------------
 
-Function TryStrToMD2(const Str: String; out Hash: TMD2Hash): Boolean;
+{===============================================================================
+    Backward compatibility functions
+===============================================================================}
+{-------------------------------------------------------------------------------
+    Backward compatibility functions - utility functions
+-------------------------------------------------------------------------------}
+
+Function MD2toStr(MD2: TMD2): String;
+var
+  Hash: TMD2Hash;
 begin
+Hash := TMD2Hash.CreateAndInitFrom(MD2);
 try
-  Hash := StrToMD2(Str);
-  Result := True;
-except
-  Result := False;
+  Result := Hash.AsString;
+finally
+  Hash.Free;
 end;
 end;
 
 //------------------------------------------------------------------------------
 
-Function StrToMD2Def(const Str: String; Default: TMD2Hash): TMD2Hash;
-begin
-If not TryStrToMD2(Str,Result) then
-  Result := Default;
-end;
-
-//------------------------------------------------------------------------------
-
-Function CompareMD2(A,B: TMD2Hash): Integer;
+Function StrToMD2(Str: String): TMD2;
 var
-  i:  Integer;
+  Hash: TMD2Hash;
 begin
-Result := 0;
-For i := Low(TMD2Hash) to High(TMD2Hash) do
-  If A[i] > B[i] then
-    begin
-      Result := -1;
-      Break;
-    end
-  else If A[i] < B[i] then
-    begin
-      Result := 1;
-      Break;
-    end;
+Hash := TMD2Hash.Create;
+try
+  Hash.FromString(Str);
+  Result := Hash.MD2;
+finally
+  Hash.Free;
+end;
 end;
 
 //------------------------------------------------------------------------------
 
-Function SameMD2(A,B: TMD2Hash): Boolean;
+Function TryStrToMD2(const Str: String; out MD2: TMD2): Boolean;
 var
-  i:  Integer;
+  Hash: TMD2Hash;
 begin
-Result := True;
-For i := Low(TMD2Hash) to High(TMD2Hash) do
-  If A[i] <> B[i] then
-    begin
-      Result := False;
-      Break;
-    end;
+Hash := TMD2Hash.Create;
+try
+  Result := Hash.TryFromString(Str);
+  If Result then
+    MD2 := Hash.MD2;
+finally
+  Hash.Free;
+end;
 end;
 
 //------------------------------------------------------------------------------
 
-Function BinaryCorrectMD2(Hash: TMD2Hash): TMD2Hash;
+Function StrToMD2Def(const Str: String; Default: TMD2): TMD2;
+var
+  Hash: TMD2Hash;
 begin
-Result := Hash;
+Hash := TMD2Hash.Create;
+try
+  Hash.FromStringDef(Str,Default);
+  Result := Hash.MD2;
+finally
+  Hash.Free;
+end;
 end;
 
-//==============================================================================
+//------------------------------------------------------------------------------
+
+Function CompareMD2(A,B: TMD2): Integer;
+var
+  HashA:  TMD2Hash;
+  HashB:  TMD2Hash;
+begin
+HashA := TMD2Hash.CreateAndInitFrom(A);
+try
+  HashB := TMD2Hash.CreateAndInitFrom(B);
+  try
+    Result := HashA.Compare(HashB);
+  finally
+    HashB.Free;
+  end;
+finally
+  HashA.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function SameMD2(A,B: TMD2): Boolean;
+var
+  HashA:  TMD2Hash;
+  HashB:  TMD2Hash;
+begin
+HashA := TMD2Hash.CreateAndInitFrom(A);
+try
+  HashB := TMD2Hash.CreateAndInitFrom(B);
+  try
+    Result := HashA.Same(HashB);
+  finally
+    HashB.Free;
+  end;
+finally
+  HashA.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function BinaryCorrectMD2(MD2: TMD2): TMD2;
+begin
+Result := MD2;
+end;
+
+{-------------------------------------------------------------------------------
+    Backward compatibility functions - processing functions
+-------------------------------------------------------------------------------}
 
 procedure BufferMD2(var MD2State: TMD2State; const Buffer; Size: TMemSize);
 var
-  i:    TMemSize;
-  Buff: PMD2Block;
+  Hash: TMD2Hash;
 begin
-If Size > 0 then
-  begin
-    If (Size mod BlockSize) = 0 then
-      begin
-        Buff := @Buffer;
-        For i := 0 to Pred(Size div BlockSize) do
-          begin
-            BlockChecksum(MD2State,Buff^);
-            BlockHash(MD2State,Buff^);
-            Inc(Buff);
-          end;
-      end
-    else raise Exception.CreateFmt('BufferMD2: Buffer size is not divisible by %d.',[BlockSize]);
-  end;
-end;
-
-//------------------------------------------------------------------------------
-
-Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TMemSize): TMD2Hash;
-var
-  FullBlocks:     TMemSize;
-  HelpBlocks:     TMemSize;
-  HelpBlocksBuff: Pointer;
-begin
-Result := ZeroMD2;
-FullBlocks := Size div BlockSize;
-BufferMD2(MD2State,Buffer,FullBlocks * BlockSize);
-HelpBlocks := Succ(Size div BlockSize) - FullBlocks;
-HelpBlocksBuff := AllocMem(HelpBlocks * BlockSize);
+Hash := TMD2Hash.CreateAndInitFrom(TMD2Hash.MD2FromSys(MD2State.Hash));
 try
-  FillChar(HelpBlocksBuff^,HelpBlocks * BlockSize,UInt8(((UInt64(FullBlocks) + HelpBlocks) * BlockSize) - Size));
-{$IFDEF FPCDWM}{$PUSH}W4055{$ENDIF}
-  Move(Pointer(PtrUInt(@Buffer) + (FullBlocks * BlockSize))^,HelpBlocksBuff^,Size - (FullBlocks * Int64(BlockSize)));
-{$IFDEF FPCDWM}{$POP}{$ENDIF}
-  BufferMD2(MD2State,HelpBlocksBuff^,HelpBlocks * BlockSize);
-  BlockHash(MD2State,MD2State.Checksum);
-  Move(MD2State.HashBuffer,Result,SizeOf(Result));
-finally
-  FreeMem(HelpBlocksBuff,HelpBlocks * BlockSize);
-end;
-end;
-
-//==============================================================================
-
-Function BufferMD2(const Buffer; Size: TMemSize): TMD2Hash;
-begin
-Result := LastBufferMD2(InitialMD2State,Buffer,Size);
-end;
-
-//==============================================================================
-
-Function AnsiStringMD2(const Str: AnsiString): TMD2Hash;
-begin
-Result := BufferMD2(PAnsiChar(Str)^,Length(Str) * SizeOf(AnsiChar));
-end;
-
-//------------------------------------------------------------------------------
-
-Function WideStringMD2(const Str: WideString): TMD2Hash;
-begin
-Result := BufferMD2(PWideChar(Str)^,Length(Str) * SizeOf(WideChar));
-end;
-
-//------------------------------------------------------------------------------
-
-Function StringMD2(const Str: String): TMD2Hash;
-begin
-Result := BufferMD2(PChar(Str)^,Length(Str) * SizeOf(Char));
-end;
-
-//==============================================================================
-
-Function StreamMD2(Stream: TStream; Count: Int64 = -1): TMD2Hash;
-var
-  Buffer:     Pointer;
-  BytesRead:  Integer;
-  MD2State:   TMD2State;
-
-  Function Min(A,B: Int64): Int64;
-  begin
-    If A < B then Result := A
-      else Result := B;
-  end;
-
-begin
-If Assigned(Stream) then
-  begin
-    If Count = 0 then
-      Count := Stream.Size - Stream.Position;
-    If Count < 0 then
-      begin
-        Stream.Position := 0;
-        Count := Stream.Size;
-      end;
-    GetMem(Buffer,BufferSize);
-    try
-      MD2State := InitialMD2State;
-      repeat
-        BytesRead := Stream.Read(Buffer^,Min(BufferSize,Count));
-        If BytesRead < BufferSize then
-          Result := LastBufferMD2(MD2State,Buffer^,BytesRead)
-        else
-          BufferMD2(MD2State,Buffer^,BytesRead);
-        Dec(Count,BytesRead);
-      until BytesRead < BufferSize;
-    finally
-      FreeMem(Buffer,BufferSize);
+  Hash.Checksum := MD2State.Checksum;
+  If Size > 0 then
+    begin
+      If (Size mod Hash.BlockSize) = 0 then
+        begin
+          Hash.Update(Buffer,Size);
+          MD2State.Checksum := Hash.Checksum;
+          MD2State.Hash := Hash.MD2Sys;
+        end
+      else raise EMD2ProcessingError.CreateFmt('BufferMD2: Buffer size (%d) is not divisible by %d.',[Size,Hash.BlockSize]);
     end;
-  end
-else raise Exception.Create('StreamMD2: Stream is not assigned.');
+finally
+  Hash.Free;
+end;
 end;
 
 //------------------------------------------------------------------------------
 
-Function FileMD2(const FileName: String): TMD2Hash;
+Function LastBufferMD2(MD2State: TMD2State; const Buffer; Size: TMemSize): TMD2;
 var
-  FileStream: TFileStream;
+  Hash: TMD2Hash;
 begin
-FileStream := TFileStream.Create(StrToRTL(FileName), fmOpenRead or fmShareDenyWrite);
+Hash := TMD2Hash.CreateAndInitFrom(TMD2Hash.MD2FromSys(MD2State.Hash));
 try
-  Result := StreamMD2(FileStream);
+  Hash.Checksum := MD2State.Checksum;
+  Hash.Final(Buffer,Size);
+  Result := Hash.MD2;
 finally
-  FileStream.Free;
+  Hash.Free;
 end;
 end;
 
-//==============================================================================
+//------------------------------------------------------------------------------
+
+Function BufferMD2(const Buffer; Size: TMemSize): TMD2;
+var
+  Hash: TMD2Hash;
+begin
+Hash := TMD2Hash.Create;
+try
+  Hash.HashBuffer(Buffer,Size);
+  Result := Hash.MD2;
+finally
+  Hash.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function AnsiStringMD2(const Str: AnsiString): TMD2;
+var
+  Hash: TMD2Hash;
+begin
+Hash := TMD2Hash.Create;
+try
+  Hash.HashAnsiString(Str);
+  Result := Hash.MD2;
+finally
+  Hash.Free;
+end;
+end;
+ 
+//------------------------------------------------------------------------------
+
+Function WideStringMD2(const Str: WideString): TMD2;
+var
+  Hash: TMD2Hash;
+begin
+Hash := TMD2Hash.Create;
+try
+  Hash.HashWideString(Str);
+  Result := Hash.MD2;
+finally
+  Hash.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function StringMD2(const Str: String): TMD2;
+var
+  Hash: TMD2Hash;
+begin
+Hash := TMD2Hash.Create;
+try
+  Hash.HashString(Str);
+  Result := Hash.MD2;
+finally
+  Hash.Free;
+end;
+end;
+ 
+//------------------------------------------------------------------------------
+
+Function StreamMD2(Stream: TStream; Count: Int64 = -1): TMD2;
+var
+  Hash: TMD2Hash;
+begin
+Hash := TMD2Hash.Create;
+try
+  Hash.HashStream(Stream,Count);
+  Result := Hash.MD2;
+finally
+  Hash.Free;
+end;
+end;
+
+//------------------------------------------------------------------------------
+
+Function FileMD2(const FileName: String): TMD2;
+var
+  Hash: TMD2Hash;
+begin
+Hash := TMD2Hash.Create;
+try
+  Hash.HashFile(FileName);
+  Result := Hash.MD2;
+finally
+  Hash.Free;
+end;
+end;
+
+{-------------------------------------------------------------------------------
+    Backward compatibility functions - context functions
+-------------------------------------------------------------------------------}
 
 Function MD2_Init: TMD2Context;
+var
+  Temp: TMD2Hash;
 begin
-Result := AllocMem(SizeOf(TMD2Context_Internal));
-with PMD2Context_Internal(Result)^ do
-  begin
-    MD2State := InitialMD2State;
-    TransferSize := 0;
-  end;
+Temp := TMD2Hash.CreateAndInit;
+Result := TMD2Context(Temp);
 end;
 
 //------------------------------------------------------------------------------
 
 procedure MD2_Update(Context: TMD2Context; const Buffer; Size: TMemSize);
-var
-  FullBlocks:     TMemSize;
-  RemainingSize:  TMemSize;
 begin
-with PMD2Context_Internal(Context)^ do
-  begin
-    If TransferSize > 0 then
-      begin
-        If Size >= (BlockSize - TransferSize) then
-          begin
-            Move(Buffer,TransferBuffer[TransferSize],BlockSize - TransferSize);
-            BufferMD2(MD2State,TransferBuffer,BlockSize);
-            RemainingSize := Size - (BlockSize - TransferSize);
-            TransferSize := 0;
-          {$IFDEF FPCDWM}{$PUSH}W4055 W4056{$ENDIF}
-            MD2_Update(Context,Pointer(PtrUInt(@Buffer) + (Size - RemainingSize))^,RemainingSize);
-          {$IFDEF FPCDWM}{$POP}{$ENDIF}
-          end
-        else
-          begin
-            Move(Buffer,TransferBuffer[TransferSize],Size);
-            Inc(TransferSize,Size);
-          end;  
-      end
-    else
-      begin
-        FullBlocks := Size div BlockSize;
-        BufferMD2(MD2State,Buffer,FullBlocks * BlockSize);
-        If TMemSize(FullBlocks * BlockSize) < Size then
-          begin
-            TransferSize := Size - (FullBlocks * Int64(BlockSize));
-          {$IFDEF FPCDWM}{$PUSH}W4055 W4056{$ENDIF}
-            Move(Pointer(PtrUInt(@Buffer) + (Size - TransferSize))^,TransferBuffer,TransferSize)
-          {$IFDEF FPCDWM}{$POP}{$ENDIF}
-          end;
-      end;
-  end;
+TMD2Hash(Context).Update(Buffer,Size);
 end;
 
 //------------------------------------------------------------------------------
 
-Function MD2_Final(var Context: TMD2Context; const Buffer; Size: TMemSize): TMD2Hash;
+Function MD2_Final(var Context: TMD2Context; const Buffer; Size: TMemSize): TMD2;
 begin
 MD2_Update(Context,Buffer,Size);
 Result := MD2_Final(Context);
 end;
 
-
 //------------------------------------------------------------------------------
 
-Function MD2_Final(var Context: TMD2Context): TMD2Hash;
+Function MD2_Final(var Context: TMD2Context): TMD2;
 begin
-with PMD2Context_Internal(Context)^ do
-  Result := LastBufferMD2(MD2State,TransferBuffer,TransferSize);
-FreeMem(Context,SizeOf(TMD2Context_Internal));
-Context := nil;
+TMD2Hash(Context).Final;
+Result := TMD2Hash(Context).MD2;
+FreeAndNil(TMD2Hash(Context));
 end;
 
 //------------------------------------------------------------------------------
 
-Function MD2_Hash(const Buffer; Size: TMemSize): TMD2Hash;
+Function MD2_Hash(const Buffer; Size: TMemSize): TMD2;
+var
+  Hash: TMD2Hash;
 begin
-Result := LastBufferMD2(InitialMD2State,Buffer,Size);
+Hash := TMD2Hash.Create;
+try
+  Hash.HashBuffer(Buffer,Size);
+  Result := Hash.MD2;
+finally
+  Hash.Free;
+end;
 end;
 
 end.
