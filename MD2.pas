@@ -11,7 +11,7 @@
 
   Version 1.2 (2020-04-24)
 
-  Last change 2020-04-24
+  Last change 2020-05-09
 
   ©2015-2020 František Milt
 
@@ -66,7 +66,7 @@ uses
   present only for the sake of completeness.
 }
 type
-  TMD2 = array[0..15] of UInt8;
+  TMD2 = packed array[0..15] of UInt8;
   PMD2 = ^TMD2;
 
   TMD2Sys = type TMD2;
