@@ -9,9 +9,9 @@
 
   MD2 calculation
 
-  Version 1.2 (2020-04-24)
+  Version 1.2.1 (2020-07-13)
 
-  Last change 2020-05-09
+  Last change 2020-07-13
 
   ©2015-2020 František Milt
 
@@ -113,6 +113,7 @@ type
     class Function HashSize: TMemSize; override;
     class Function HashName: String; override;
     class Function HashEndianness: THashEndianness; override;
+    class Function HashFinalization: Boolean; override;
     constructor CreateAndInitFrom(Hash: THashBase); overload; override;
     constructor CreateAndInitFrom(Hash: TMD2); overload; virtual;
     procedure Init; override;
@@ -297,9 +298,9 @@ end;
 procedure TMD2Hash.ProcessLast;
 begin
 {$IFDEF FPCDWM}{$PUSH}W4055{$ENDIF}
-FillChar(Pointer(PtrUInt(fTempBlock) + PtrUInt(fTempCount))^,fBlockSize - fTempCount,UInt8(fBlockSize - fTempCount));
+FillChar(Pointer(PtrUInt(fTransBlock) + PtrUInt(fTransCount))^,fBlockSize - fTransCount,UInt8(fBlockSize - fTransCount));
 {$IFDEF FPCDWM}{$POP}{$ENDIF}
-ProcessBlock(fTempBlock^);
+ProcessBlock(fTransBlock^);
 BlockHash(fChecksum);
 end;
 
@@ -385,6 +386,13 @@ end;
 
 //------------------------------------------------------------------------------
 
+class Function TMD2Hash.HashFinalization: Boolean;
+begin
+Result := True;
+end;
+
+//------------------------------------------------------------------------------
+
 constructor TMD2Hash.CreateAndInitFrom(Hash: THashBase);
 begin
 inherited CreateAndInitFrom(Hash);
@@ -393,8 +401,7 @@ If Hash is TMD2Hash then
     fMD2 := TMD2Hash(Hash).MD2Sys;
     fChecksum := TMD2Hash(Hash).Checksum;
   end
-else
-  raise EMD2IncompatibleClass.CreateFmt('TMD2Hash.CreateAndInitFrom: Incompatible class (%s).',[Hash.ClassName]);
+else raise EMD2IncompatibleClass.CreateFmt('TMD2Hash.CreateAndInitFrom: Incompatible class (%s).',[Hash.ClassName]);
 end;
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
