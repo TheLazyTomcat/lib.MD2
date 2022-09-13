@@ -11,9 +11,9 @@
 
   Version 1.2.1 (2020-07-13)
 
-  Last change 2020-08-02
+  Last change 2022-09-13
 
-  ©2015-2020 František Milt
+  ©2015-2022 František Milt
 
   Contacts:
     František Milt: frantisek.milt@gmail.com
@@ -93,11 +93,10 @@ type
 ===============================================================================}
 type
   TMD2Hash = class(TBlockHash)
-  private
+  protected
     fChecksum:  TMD2Sys;
     fMD2:       TMD2Sys;
-    Function GetMD2: TMD2;
-  protected
+    Function GetMD2: TMD2; virtual;
     procedure BlockChecksum(const Block); virtual;
     procedure BlockHash(const Block); virtual;
     procedure ProcessBlock(const Block); override;
@@ -224,7 +223,7 @@ const
     TMD2Hash - class implementation
 ===============================================================================}
 {-------------------------------------------------------------------------------
-    TMD2Hash - private methods
+    TMD2Hash - protected methods
 -------------------------------------------------------------------------------}
 
 Function TMD2Hash.GetMD2: TMD2;
@@ -232,9 +231,7 @@ begin
 Result := MD2FromSys(fMD2);
 end;
 
-{-------------------------------------------------------------------------------
-    TMD2Hash - protected methods
--------------------------------------------------------------------------------}
+//------------------------------------------------------------------------------
 
 procedure TMD2Hash.BlockChecksum(const Block);
 var
