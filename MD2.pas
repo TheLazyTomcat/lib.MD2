@@ -11,7 +11,7 @@
 
   Version 1.2.1 (2020-07-13)
 
-  Last change 2022-09-13
+  Last change 2022-09-24
 
   ©2015-2022 František Milt
 
@@ -40,7 +40,7 @@
 unit MD2;
 
 {$IFDEF FPC}
-  {$MODE Delphi}
+  {$MODE ObjFPC}
   {$DEFINE FPC_DisableWarns}
   {$MACRO ON}
 {$ENDIF}
@@ -468,7 +468,7 @@ procedure TMD2Hash.FromString(const Str: String);
 var
   TempStr:  String;
   i:        Integer;
-  MD2:      TMD2;
+  TempMD2:  TMD2;
 begin
 If Length(Str) < Integer(HashSize * 2) then
   TempStr := StringOfChar('0',Integer(HashSize * 2) - Length(Str)) + Str
@@ -476,9 +476,9 @@ else If Length(Str) > Integer(HashSize * 2) then
   TempStr := Copy(Str,Length(Str) - Pred(Integer(HashSize * 2)),Integer(HashSize * 2))
 else
   TempStr := Str;
-For i := Low(MD2) to High(MD2) do
-  MD2[i] := UInt8(StrToInt('$' + Copy(TempStr,(i * 2) + 1,2)));
-fMD2 := MD2ToSys(MD2);
+For i := Low(TempMD2) to High(TempMD2) do
+  TempMD2[i] := UInt8(StrToInt('$' + Copy(TempStr,(i * 2) + 1,2)));
+fMD2 := MD2ToSys(TempMD2);
 end;
 
 //------------------------------------------------------------------------------
